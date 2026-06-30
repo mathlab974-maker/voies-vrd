@@ -160,12 +160,22 @@
 		const idx = existing.indexOf(secteur) >= 0 ? existing.indexOf(secteur) : existing.length;
 		const couleur = PALETTE[idx % PALETTE.length];
 		const emptyGeom = { type: 'GeometryCollection', geometries: [] };
+		// Calculer le prochain id
+		const { data: maxRow } = await supabase.from('voies').select('id').order('id', { ascending: false }).limit(1).single();
+		const nextId = (maxRow?.id ?? 0) + 1;
+
 		const { data: rows, error } = await supabase.from('voies').insert({
+			id: nextId,
 			nom, secteur, avancement: newAvancement, couleur,
-			geometry: emptyGeom, montant: null, lineaire_m: 0,
+			geometry: emptyGeom, lineaire_m: 0,
 			osm_voies: [], statut: 'absent_osm', statut_label: 'Absent OSM',
 		}).select().single();
-		if (!error && rows) {
+		if (error) {
+			console.error('Erreur création voie:', error);
+			saving = false;
+			return;
+		}
+		if (rows) {
 			const newFeature: VoieFeature = {
 				type: 'Feature', id: rows.id,
 				geometry: emptyGeom as any,
