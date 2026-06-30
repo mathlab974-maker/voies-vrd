@@ -48,7 +48,7 @@
 		{ id: 'osm',       label: 'Plan',      icon: '🗺',  url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',                                          attribution: '&copy; OpenStreetMap contributors', maxZoom: 20 },
 		{ id: 'satellite', label: 'Satellite', icon: '🛰',  url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '&copy; Esri &mdash; Esri, DeLorme, NAVTEQ', maxZoom: 19 },
 		{ id: 'topo',      label: 'Topo',      icon: '⛰',  url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',                                             attribution: '&copy; OpenStreetMap contributors, &copy; OpenTopoMap', maxZoom: 17 },
-		{ id: 'street',    label: 'Stadia',    icon: '🌆', url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',              attribution: '&copy; Stadia Maps &copy; OpenStreetMap contributors', maxZoom: 20 },
+		{ id: 'street',    label: 'Dark',      icon: '🌆', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',                        attribution: '&copy; OpenStreetMap contributors &copy; CARTO', maxZoom: 20 },
 	] as const;
 	type BasemapId = typeof BASEMAPS[number]['id'];
 	let currentBasemap = $state<BasemapId>('street');
@@ -59,7 +59,7 @@
 		if (!L || !map) return;
 		try {
 			const query = `[out:json][timeout:25];relation(280118);out geom;`;
-			const res = await fetch('https://overpass-api.de/api/interpreter', {
+			const res = await fetch('https://overpass.kumi.systems/api/interpreter', {
 				method: 'POST',
 				body: query,
 			});
@@ -140,7 +140,8 @@
 		const bm = BASEMAPS.find(b => b.id === id);
 		if (!bm) return;
 		if (tileLayer) { map.removeLayer(tileLayer); }
-		tileLayer = L.tileLayer(bm.url, { attribution: bm.attribution, maxZoom: bm.maxZoom });
+		const subdomains = bm.id === 'street' ? 'abcd' : undefined;
+		tileLayer = L.tileLayer(bm.url, { attribution: bm.attribution, maxZoom: bm.maxZoom, ...(subdomains ? { subdomains } : {}) });
 		tileLayer.addTo(map);
 		tileLayer.bringToBack();
 		currentBasemap = id;
@@ -498,7 +499,7 @@
 		L = (await import('leaflet')).default;
 		map = L.map(mapEl, { zoomControl: true });
 		const defaultBm = BASEMAPS.find(b => b.id === 'street')!;
-		tileLayer = L.tileLayer(defaultBm.url, { attribution: defaultBm.attribution, maxZoom: defaultBm.maxZoom });
+		tileLayer = L.tileLayer(defaultBm.url, { attribution: defaultBm.attribution, maxZoom: defaultBm.maxZoom, subdomains: 'abcd' });
 		tileLayer.addTo(map);
 		layerGroup = L.layerGroup().addTo(map);
 		loadCommune();
