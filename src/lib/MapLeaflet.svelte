@@ -45,13 +45,18 @@
 	let ready = $state(false);
 
 	const BASEMAPS = [
-		{ id: 'osm',       label: 'Plan',      icon: '🗺',  url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',                                          attribution: '&copy; OpenStreetMap contributors', maxZoom: 20 },
-		{ id: 'satellite', label: 'Satellite', icon: '🛰',  url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '&copy; Esri &mdash; Esri, DeLorme, NAVTEQ', maxZoom: 19 },
-		{ id: 'topo',      label: 'Topo',      icon: '⛰',  url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',                                             attribution: '&copy; OpenStreetMap contributors, &copy; OpenTopoMap', maxZoom: 17 },
-		{ id: 'street',    label: 'Dark',      icon: '🌆', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',                        attribution: '&copy; OpenStreetMap contributors &copy; CARTO', maxZoom: 20 },
+		{ id: 'dark',      label: 'Dark',       icon: '🌑', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',                                              attribution: '&copy; OpenStreetMap &copy; CARTO',                        maxZoom: 20, subdomains: 'abcd' },
+		{ id: 'osm',       label: 'Plan OSM',   icon: '🗺', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',                                                             attribution: '&copy; OpenStreetMap contributors',                        maxZoom: 20, subdomains: '' },
+		{ id: 'satellite', label: 'Satellite',  icon: '🛰', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',             attribution: '&copy; Esri',                                              maxZoom: 19, subdomains: '' },
+		{ id: 'esri_topo', label: 'Topo Esri',  icon: '⛰', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',                  attribution: '&copy; Esri',                                              maxZoom: 19, subdomains: '' },
+		{ id: 'topo',      label: 'OTM Topo',   icon: '🏔', url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',                                                               attribution: '&copy; OpenStreetMap &copy; OpenTopoMap',                  maxZoom: 17, subdomains: '' },
+		{ id: 'light',     label: 'Clair',      icon: '☀️', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',                                             attribution: '&copy; OpenStreetMap &copy; CARTO',                        maxZoom: 20, subdomains: 'abcd' },
+		{ id: 'voyager',   label: 'Voyager',    icon: '🦭', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',                                    attribution: '&copy; OpenStreetMap &copy; CARTO',                        maxZoom: 20, subdomains: 'abcd' },
+		{ id: 'esri_img',  label: 'Hybrid',     icon: '🌍', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',               attribution: '&copy; Esri',                                              maxZoom: 19, subdomains: '' },
 	] as const;
 	type BasemapId = typeof BASEMAPS[number]['id'];
-	let currentBasemap = $state<BasemapId>('street');
+	let currentBasemap = $state<BasemapId>('dark');
+	let basemapMenuOpen = $state(false);
 	let tileLayer: import('leaflet').TileLayer | null = null;
 	let communeLayer: import('leaflet').GeoJSON | null = null;
 
@@ -140,8 +145,8 @@
 		const bm = BASEMAPS.find(b => b.id === id);
 		if (!bm) return;
 		if (tileLayer) { map.removeLayer(tileLayer); }
-		const subdomains = bm.id === 'street' ? 'abcd' : undefined;
-		tileLayer = L.tileLayer(bm.url, { attribution: bm.attribution, maxZoom: bm.maxZoom, ...(subdomains ? { subdomains } : {}) });
+		tileLayer = L.tileLayer(bm.url, { attribution: bm.attribution, maxZoom: bm.maxZoom, ...(bm.subdomains ? { subdomains: bm.subdomains } : {}) });
+		basemapMenuOpen = false;
 		tileLayer.addTo(map);
 		tileLayer.bringToBack();
 		currentBasemap = id;
@@ -498,8 +503,8 @@
 	onMount(async () => {
 		L = (await import('leaflet')).default;
 		map = L.map(mapEl, { zoomControl: true });
-		const defaultBm = BASEMAPS.find(b => b.id === 'street')!;
-		tileLayer = L.tileLayer(defaultBm.url, { attribution: defaultBm.attribution, maxZoom: defaultBm.maxZoom, subdomains: 'abcd' });
+		const defaultBm = BASEMAPS.find(b => b.id === 'dark')!;
+		tileLayer = L.tileLayer(defaultBm.url, { attribution: defaultBm.attribution, maxZoom: defaultBm.maxZoom, subdomains: defaultBm.subdomains || 'abc' });
 		tileLayer.addTo(map);
 		layerGroup = L.layerGroup().addTo(map);
 		loadCommune();
@@ -543,24 +548,37 @@
 <div class="relative w-full h-full">
 	<div bind:this={mapEl} class="w-full h-full"></div>
 
-	<!-- Contrôles carte (fonds + commune) -->
+	<!-- Sélecteur fond de carte repliable -->
 	{#if ready && editMode === 'none'}
-		<div class="absolute top-3 right-3 z-[1000] flex flex-col gap-1.5">
-			<!-- Sélecteur fond de carte -->
-			<div class="flex gap-1 p-1 rounded-xl" style="background:rgba(13,17,23,0.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 4px 24px rgba(0,0,0,0.4)">
-				{#each BASEMAPS as bm}
-					<button
-						onclick={() => switchBasemap(bm.id)}
-						title={bm.label}
-						class="flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all hover:scale-105"
-						style={currentBasemap === bm.id
-							? 'background:rgba(99,102,241,0.3);border:1px solid rgba(99,102,241,0.6);color:#fff'
-							: 'background:transparent;border:1px solid transparent;color:#6b7280'}>
-						<span class="text-base leading-none">{bm.icon}</span>
-						<span class="leading-none text-[10px]">{bm.label}</span>
-					</button>
-				{/each}
-			</div>
+		{@const activeBm = BASEMAPS.find(b => b.id === currentBasemap)}
+		<div class="absolute top-3 right-3 z-[1000]">
+			<!-- Bouton déclencheur -->
+			<button
+				onclick={() => basemapMenuOpen = !basemapMenuOpen}
+				class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all hover:scale-105"
+				style="background:rgba(13,17,23,0.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.12);box-shadow:0 4px 24px rgba(0,0,0,0.4);color:#e2e8f0">
+				<span class="text-base leading-none">{activeBm?.icon}</span>
+				<span>{activeBm?.label}</span>
+				<svg class="w-3 h-3 text-gray-500 transition-transform {basemapMenuOpen ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
+			</button>
+			<!-- Menu déroulant -->
+			{#if basemapMenuOpen}
+				<div class="absolute top-full right-0 mt-1.5 rounded-xl overflow-hidden"
+					style="background:rgba(13,17,23,0.96);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.6);min-width:150px">
+					{#each BASEMAPS as bm}
+						<button
+							onclick={() => switchBasemap(bm.id)}
+							class="w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors hover:bg-white/5 text-left"
+							style={currentBasemap === bm.id ? 'color:#a5b4fc;background:rgba(99,102,241,0.12)' : 'color:#94a3b8'}>
+							<span class="text-sm leading-none shrink-0">{bm.icon}</span>
+							<span class="font-medium">{bm.label}</span>
+							{#if currentBasemap === bm.id}
+								<svg class="w-3 h-3 ml-auto shrink-0 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			{/if}
 		</div>
 	{/if}
 
