@@ -364,10 +364,8 @@
 		{/each}
 	</div>
 
-</aside>
-
-<!-- Modal nouvelle voie -->
-{#if showModal}
+	<!-- Modal nouvelle voie -->
+	{#if showModal}
 	<!-- Overlay -->
 	<div
 		class="fixed inset-0 z-[2000] flex items-center justify-center"
@@ -470,4 +468,6 @@
 			</div>
 		</div>
 	</div>
-{/if}
+	{/if}
+
+</aside>
