@@ -13,6 +13,7 @@ export interface VoieProperties {
 	note: string;
 	couleur: string;
 	lineaire_m: number;
+	etapes_mop?: string[];
 }
 
 export interface VoieFeature {

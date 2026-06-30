@@ -13,12 +13,138 @@
 
 	let { data, filteredIds, selectedId, onSelect, onUpdate }: Props = $props();
 
+	const AV_COLORS: Record<string, string> = {
+		'Terminé':                   '#2e7d32',
+		'En cours — Programmation': '#1565c0',
+		'En cours — Études':        '#7b1fa2',
+		'En cours — Consultation': '#e65100',
+		'En cours — Travaux':       '#f9a825',
+		'En cours — Clôture':       '#558b2f',
+		'Non démarré':               '#c62828',
+		'En cours':                '#f9a825',
+		'À planifier':              '#1565c0'
+	};
+	function voieCouleur(f: VoieFeature): string {
+		const av = f.properties.avancement || '';
+		// Correspondance exacte d'abord (inclut les niveaux MOP)
+		if (AV_COLORS[av]) return AV_COLORS[av];
+		// Fallback par inclusion
+		const avL = av.toLowerCase();
+		if (avL.includes('termin')) return AV_COLORS['Terminé'];
+		if (avL.includes('en cours')) return AV_COLORS['En cours'];
+		if (avL.includes('non')) return AV_COLORS['Non démarré'];
+		if (avL.includes('planifier')) return AV_COLORS['À planifier'];
+		return f.properties.couleur ?? '#546e7a';
+	}
+
 	let mapEl: HTMLDivElement;
 	let L: typeof import('leaflet');
 	let map: import('leaflet').Map;
 	let layerGroup: import('leaflet').LayerGroup;
 	let editGroup: import('leaflet').LayerGroup;
 	let ready = $state(false);
+
+	const BASEMAPS = [
+		{ id: 'osm',       label: 'Plan',      icon: '🗺',  url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',                                          attribution: '&copy; OpenStreetMap contributors', maxZoom: 20 },
+		{ id: 'satellite', label: 'Satellite', icon: '🛰',  url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '&copy; Esri &mdash; Esri, DeLorme, NAVTEQ', maxZoom: 19 },
+		{ id: 'topo',      label: 'Topo',      icon: '⛰',  url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',                                             attribution: '&copy; OpenStreetMap contributors, &copy; OpenTopoMap', maxZoom: 17 },
+		{ id: 'street',    label: 'Stadia',    icon: '🌆', url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',              attribution: '&copy; Stadia Maps &copy; OpenStreetMap contributors', maxZoom: 20 },
+	] as const;
+	type BasemapId = typeof BASEMAPS[number]['id'];
+	let currentBasemap = $state<BasemapId>('street');
+	let tileLayer: import('leaflet').TileLayer | null = null;
+	let communeLayer: import('leaflet').GeoJSON | null = null;
+
+	async function loadCommune() {
+		if (!L || !map) return;
+		try {
+			const query = `[out:json][timeout:25];relation(280118);out geom;`;
+			const res = await fetch('https://overpass-api.de/api/interpreter', {
+				method: 'POST',
+				body: query,
+			});
+			const json = await res.json();
+			const rel = json.elements?.[0];
+			if (!rel) return;
+
+			// Collecter les ways par rôle
+			const waysByRole: Record<string, number[][][]> = { outer: [], inner: [] };
+			for (const m of rel.members ?? []) {
+				if (m.type !== 'way' || !m.geometry) continue;
+				const role = m.role === 'inner' ? 'inner' : 'outer';
+				waysByRole[role].push(m.geometry.map((p: any) => [p.lon, p.lat]));
+			}
+
+			// Assembler les ways en anneaux continus par chaînage
+			function assembleRings(ways: number[][][]): number[][][] {
+				const rings: number[][][] = [];
+				const remaining = ways.map(w => [...w]);
+				while (remaining.length > 0) {
+					let ring = remaining.shift()!;
+					let changed = true;
+					while (changed) {
+						changed = false;
+						for (let i = 0; i < remaining.length; i++) {
+							const w = remaining[i];
+							const rEnd = ring[ring.length - 1];
+							const wStart = w[0];
+							const wEnd = w[w.length - 1];
+							const rStart = ring[0];
+							// Comparer avec tolérance
+							const eq = (a: number[], b: number[]) => Math.abs(a[0]-b[0]) < 1e-7 && Math.abs(a[1]-b[1]) < 1e-7;
+							if (eq(rEnd, wStart)) {
+								ring = [...ring, ...w.slice(1)];
+							} else if (eq(rEnd, wEnd)) {
+								ring = [...ring, ...[...w].reverse().slice(1)];
+							} else if (eq(rStart, wEnd)) {
+								ring = [...w, ...ring.slice(1)];
+							} else if (eq(rStart, wStart)) {
+								ring = [...[...w].reverse(), ...ring.slice(1)];
+							} else {
+								continue;
+							}
+							remaining.splice(i, 1);
+							changed = true;
+							break;
+						}
+					}
+					rings.push(ring);
+				}
+				return rings;
+			}
+
+			const outerRings = assembleRings(waysByRole.outer);
+			const innerRings = assembleRings(waysByRole.inner);
+			if (outerRings.length === 0) return;
+
+			const geojson: any = {
+				type: 'Feature',
+				geometry: {
+					type: 'MultiPolygon',
+					coordinates: outerRings.map(ring => [ring, ...innerRings])
+				},
+				properties: {}
+			};
+			communeLayer = L.geoJSON(geojson, {
+				style: { color: '#6366f1', weight: 2.5, opacity: 0.85, fill: true, fillColor: '#6366f1', fillOpacity: 0.04, dashArray: '6,4' },
+				interactive: false,
+			}).addTo(map);
+			communeLayer.bringToBack();
+		} catch(e) {
+			console.warn('Contour commune non chargé:', e);
+		}
+	}
+
+	function switchBasemap(id: BasemapId) {
+		if (!map || !L) return;
+		const bm = BASEMAPS.find(b => b.id === id);
+		if (!bm) return;
+		if (tileLayer) { map.removeLayer(tileLayer); }
+		tileLayer = L.tileLayer(bm.url, { attribution: bm.attribution, maxZoom: bm.maxZoom });
+		tileLayer.addTo(map);
+		tileLayer.bringToBack();
+		currentBasemap = id;
+	}
 
 	type EditMode = 'none' | 'draw' | 'edit';
 	let editMode = $state<EditMode>('none');
@@ -71,12 +197,13 @@
 		for (const f of features) {
 			if (!filtered.has(f.id)) continue;
 			const isSelected = f.id === selId;
-			const color = f.properties.couleur;
+			// Non sélectionné : couleur selon avancement — Sélectionné : couleur vignette
+			const color = isSelected ? f.properties.couleur : voieCouleur(f);
 			const weight = isSelected ? 6 : 3.5;
 			const opacity = isSelected ? 1 : 0.82;
 			for (const geom of f.geometry.geometries) {
 				const coords = geom.coordinates.map(([lng, lat]: [number, number]) => [lat, lng] as [number, number]);
-				if (isSelected) L.polyline(coords, { color: '#fff', weight: weight + 4, opacity: 0.18 }).addTo(layerGroup);
+				if (isSelected) L.polyline(coords, { color: '#fff', weight: weight + 4, opacity: 0.25 }).addTo(layerGroup);
 				const line = L.polyline(coords, { color, weight, opacity, lineCap: 'round' });
 				line.bindPopup(popupHtml(f), { maxWidth: 320 });
 				line.on('click', () => onSelect(f));
@@ -370,12 +497,24 @@
 	onMount(async () => {
 		L = (await import('leaflet')).default;
 		map = L.map(mapEl, { zoomControl: true });
-		L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 20 }).addTo(map);
+		const defaultBm = BASEMAPS.find(b => b.id === 'street')!;
+		tileLayer = L.tileLayer(defaultBm.url, { attribution: defaultBm.attribution, maxZoom: defaultBm.maxZoom });
+		tileLayer.addTo(map);
 		layerGroup = L.layerGroup().addTo(map);
+		loadCommune();
 		editGroup = L.layerGroup().addTo(map);
 		map.on('click', onMapClick);
 		map.on('dblclick', onMapDblClick);
 		map.on('mousemove', onMapMouseMove);
+		// Désélection clic fond de carte
+		map.on('click', (e: any) => {
+			if (editMode !== 'none') return;
+			if (!(e.originalEvent.target as HTMLElement).closest('.leaflet-interactive')) onSelect(null);
+		});
+		// Désélection Echap
+		document.addEventListener('keydown', (e: KeyboardEvent) => {
+			if (e.key === 'Escape' && editMode === 'none') onSelect(null);
+		});
 		map.setView([-20.963, 55.652], 14);
 		ready = true;
 	});
@@ -386,10 +525,43 @@
 		if (!ready) return;
 		drawLayers(data.features, filteredIds, selectedId);
 	});
+
+	$effect(() => {
+		if (!ready || editMode !== 'none') return;
+		const id = selectedId;
+		if (!id) return;
+		const f = data.features.find(x => x.id === id);
+		if (!f || !f.geometry.geometries.length) return;
+		try {
+			const bounds = L.geoJSON({ type: 'GeometryCollection', geometries: f.geometry.geometries } as any).getBounds();
+			if (bounds.isValid()) map.fitBounds(bounds, { padding: [80, 80], maxZoom: 18, animate: true, duration: 0.5 });
+		} catch(e) {}
+	});
 </script>
 
 <div class="relative w-full h-full">
 	<div bind:this={mapEl} class="w-full h-full"></div>
+
+	<!-- Contrôles carte (fonds + commune) -->
+	{#if ready && editMode === 'none'}
+		<div class="absolute top-3 right-3 z-[1000] flex flex-col gap-1.5">
+			<!-- Sélecteur fond de carte -->
+			<div class="flex gap-1 p-1 rounded-xl" style="background:rgba(13,17,23,0.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 4px 24px rgba(0,0,0,0.4)">
+				{#each BASEMAPS as bm}
+					<button
+						onclick={() => switchBasemap(bm.id)}
+						title={bm.label}
+						class="flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all hover:scale-105"
+						style={currentBasemap === bm.id
+							? 'background:rgba(99,102,241,0.3);border:1px solid rgba(99,102,241,0.6);color:#fff'
+							: 'background:transparent;border:1px solid transparent;color:#6b7280'}>
+						<span class="text-base leading-none">{bm.icon}</span>
+						<span class="leading-none text-[10px]">{bm.label}</span>
+					</button>
+				{/each}
+			</div>
+		</div>
+	{/if}
 
 	<!-- Boutons sélection voie (mode normal) -->
 	{#if selectedId && editMode === 'none'}
