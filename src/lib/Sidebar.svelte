@@ -309,47 +309,24 @@
 				{@const terminesSec = voiesDuSecteur.filter(f => avNorm(f.properties.avancement) === 'Terminé').length}
 				{@const enCoursSec = voiesDuSecteur.filter(f => ['En cours — Travaux','En études','En programmation'].includes(avNorm(f.properties.avancement))).length}
 
-				<!-- ════ En-tête QUARTIER ════ -->
+				<!-- En-tête quartier -->
 				<button onclick={() => toggleSecteur(sec)}
-					class="w-full text-left transition-all group"
-					style="background:{ouvert ? 'rgba(30,41,59,0.7)' : 'rgba(15,23,42,0.5)'};border-bottom:2px solid rgba(99,102,241,0.2);padding:10px 16px 8px">
-					<div class="flex items-center gap-2.5">
-						<!-- Icône dossier -->
-						<div class="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.25)">
-							{#if ouvert}
-								<svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"/></svg>
-							{:else}
-								<svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-							{/if}
-						</div>
-						<div class="flex-1 min-w-0">
-							<div class="text-sm font-bold text-white truncate tracking-wide">{sec}</div>
-							<div class="flex items-center gap-2 mt-0.5 text-xs">
-								<span class="text-indigo-300 font-medium">{voiesDuSecteur.length} voie{voiesDuSecteur.length > 1 ? 's' : ''}</span>
-								{#if linSec > 0}<span class="text-blue-400">{fmtLin(linSec)}</span>{/if}
-								{#if montantSec > 0}<span class="text-emerald-400">{fmt(montantSec)}</span>{/if}
-							</div>
-						</div>
-						<!-- Badges état rapide -->
-						<div class="flex items-center gap-1 shrink-0">
-							{#if terminesSec > 0}
-								<span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="background:rgba(46,125,50,0.25);color:#4ade80;border:1px solid rgba(46,125,50,0.4)">{terminesSec}✓</span>
-							{/if}
-							{#if enCoursSec > 0}
-								<span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="background:rgba(245,124,0,0.2);color:#fb923c;border:1px solid rgba(245,124,0,0.3)">{enCoursSec}▶</span>
-							{/if}
-							<svg class="w-3.5 h-3.5 text-indigo-500 transition-transform duration-200 {ouvert ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+					class="w-full text-left flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-white/[0.025]"
+					style="border-left:3px solid {ouvert ? 'rgba(99,102,241,0.7)' : 'rgba(99,102,241,0.18)'};border-bottom:1px solid rgba(255,255,255,0.06);margin-top:4px">
+					<div class="flex-1 min-w-0">
+						<div class="text-xs font-semibold uppercase tracking-widest truncate" style="color:{ouvert ? '#a5b4fc' : '#6b7280'}">{sec}</div>
+						<div class="flex items-center gap-2 mt-0.5" style="font-size:11px;color:#4b5563">
+							<span>{voiesDuSecteur.length} voie{voiesDuSecteur.length > 1 ? 's' : ''}</span>
+							{#if linSec > 0}<span style="color:#3b82f660">{fmtLin(linSec)}</span>{/if}
+							{#if montantSec > 0}<span style="color:#10b98160">{fmt(montantSec)}</span>{/if}
 						</div>
 					</div>
-					<!-- Barre de progression du secteur -->
-					<div class="mt-2 flex gap-0.5">
-						{#each voiesDuSecteur as vf}
-							{@const vc = AV_COLORS[avNorm(vf.properties.avancement)] ?? '#546e7a'}
-							<div class="flex-1 h-1 rounded-full" style="background:{vc};opacity:0.7"></div>
-						{/each}
+					<div class="flex items-center gap-1.5 shrink-0">
+						{#if terminesSec > 0}<span style="font-size:10px;color:#4ade8099">{terminesSec}✓</span>{/if}
+						{#if enCoursSec > 0}<span style="font-size:10px;color:#fb923c80">{enCoursSec}▶</span>{/if}
+						<svg class="w-3 h-3 transition-transform duration-200 {ouvert ? 'rotate-90' : ''}" style="color:rgba(99,102,241,0.45)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
 					</div>
 				</button>
-
 				{#if ouvert}
 					<div class="py-1.5 px-2 space-y-1" style="background:rgba(0,0,0,0.15)">
 						{#each voiesDuSecteur as f}
