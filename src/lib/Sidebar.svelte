@@ -306,23 +306,52 @@
 				{@const ouvert = secteursOuverts.has(sec)}
 				{@const linSec = voiesDuSecteur.reduce((s, f) => s + (f.properties.lineaire_m ?? 0), 0)}
 				{@const montantSec = voiesDuSecteur.reduce((s, f) => s + (f.properties.montant ?? 0), 0)}
+				{@const terminesSec = voiesDuSecteur.filter(f => avNorm(f.properties.avancement) === 'Terminé').length}
+				{@const enCoursSec = voiesDuSecteur.filter(f => ['En cours — Travaux','En études','En programmation'].includes(avNorm(f.properties.avancement))).length}
 
-				<!-- En-tête secteur -->
-				<button onclick={() => toggleSecteur(sec)} class="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.03]"
-					style="border-bottom:1px solid rgba(255,255,255,0.06)">
-					<svg class="w-3.5 h-3.5 text-gray-500 shrink-0 transition-transform {ouvert ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-					<div class="flex-1 min-w-0">
-						<div class="text-sm font-semibold text-white truncate">{sec}</div>
-						<div class="flex gap-3 mt-0.5 text-xs text-gray-600">
-							<span>{voiesDuSecteur.length} voie{voiesDuSecteur.length > 1 ? 's' : ''}</span>
-							{#if linSec > 0}<span class="text-blue-500">{fmtLin(linSec)}</span>{/if}
-							{#if montantSec > 0}<span class="text-emerald-600">{fmt(montantSec)}</span>{/if}
+				<!-- ════ En-tête QUARTIER ════ -->
+				<button onclick={() => toggleSecteur(sec)}
+					class="w-full text-left transition-all group"
+					style="background:{ouvert ? 'rgba(30,41,59,0.7)' : 'rgba(15,23,42,0.5)'};border-bottom:2px solid rgba(99,102,241,0.2);padding:10px 16px 8px">
+					<div class="flex items-center gap-2.5">
+						<!-- Icône dossier -->
+						<div class="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.25)">
+							{#if ouvert}
+								<svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"/></svg>
+							{:else}
+								<svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+							{/if}
 						</div>
+						<div class="flex-1 min-w-0">
+							<div class="text-sm font-bold text-white truncate tracking-wide">{sec}</div>
+							<div class="flex items-center gap-2 mt-0.5 text-xs">
+								<span class="text-indigo-300 font-medium">{voiesDuSecteur.length} voie{voiesDuSecteur.length > 1 ? 's' : ''}</span>
+								{#if linSec > 0}<span class="text-blue-400">{fmtLin(linSec)}</span>{/if}
+								{#if montantSec > 0}<span class="text-emerald-400">{fmt(montantSec)}</span>{/if}
+							</div>
+						</div>
+						<!-- Badges état rapide -->
+						<div class="flex items-center gap-1 shrink-0">
+							{#if terminesSec > 0}
+								<span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="background:rgba(46,125,50,0.25);color:#4ade80;border:1px solid rgba(46,125,50,0.4)">{terminesSec}✓</span>
+							{/if}
+							{#if enCoursSec > 0}
+								<span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="background:rgba(245,124,0,0.2);color:#fb923c;border:1px solid rgba(245,124,0,0.3)">{enCoursSec}▶</span>
+							{/if}
+							<svg class="w-3.5 h-3.5 text-indigo-500 transition-transform duration-200 {ouvert ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+						</div>
+					</div>
+					<!-- Barre de progression du secteur -->
+					<div class="mt-2 flex gap-0.5">
+						{#each voiesDuSecteur as vf}
+							{@const vc = AV_COLORS[avNorm(vf.properties.avancement)] ?? '#546e7a'}
+							<div class="flex-1 h-1 rounded-full" style="background:{vc};opacity:0.7"></div>
+						{/each}
 					</div>
 				</button>
 
 				{#if ouvert}
-					<div class="pb-1">
+					<div class="py-1.5 px-2 space-y-1" style="background:rgba(0,0,0,0.15)">
 						{#each voiesDuSecteur as f}
 							{@const p = f.properties}
 							{@const isSelected = selectedFeature?.id === f.id}
@@ -332,57 +361,53 @@
 							{@const lastMop = mopDone > 0 ? ETAPES_MOP.filter(e => (p.etapes_mop ?? []).includes(e.id)).at(-1) : null}
 
 							<div bind:this={voieItemEls[f.id]}
-								class="mx-2 my-1 rounded-xl overflow-hidden transition-all"
-								style="border:1px solid {isSelected ? 'rgba(59,130,246,0.5)' : 'rgba(255,255,255,0.07)'};background:{isSelected ? 'rgba(59,130,246,0.08)' : 'rgba(255,255,255,0.02)'};box-shadow:{isSelected ? '0 0 0 2px rgba(59,130,246,0.15),0 4px 12px rgba(0,0,0,0.4)' : 'none'}">
+								class="rounded-lg overflow-hidden transition-all duration-150"
+								style="border:1px solid {isSelected ? 'rgba(59,130,246,0.55)' : 'rgba(255,255,255,0.06)'};background:{isSelected ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.03)'};box-shadow:{isSelected ? '0 0 0 2px rgba(59,130,246,0.2),0 2px 8px rgba(0,0,0,0.4)' : 'none'}">
 
 								<!-- Carte voie -->
 								<div class="flex items-stretch">
 									<!-- Barre colorée gauche -->
-									<div class="w-1 shrink-0" style="background:{avCol};border-radius:10px 0 0 10px;opacity:{isSelected ? 1 : 0.8}"></div>
+									<div class="w-[3px] shrink-0" style="background:{avCol};opacity:{isSelected ? 1 : 0.7}"></div>
 
 									<!-- Corps cliquable -->
-									<div class="flex-1 px-3 py-2.5 min-w-0 cursor-pointer select-none"
+									<div class="flex-1 px-2.5 py-2 min-w-0 cursor-pointer select-none"
 										onclick={() => onSelect(f)} role="button" tabindex="0"
 										aria-label="Sélectionner {p.nom}"
 										onkeydown={(e) => e.key === 'Enter' && onSelect(f)}>
 
-										<!-- Nom -->
-										<div class="text-sm font-semibold text-white truncate leading-tight">{p.nom}</div>
+										<!-- Ligne 1 : nom -->
+										<div class="text-sm font-semibold text-white truncate leading-snug">{p.nom}</div>
 
-										<!-- Badge avancement -->
-										<div class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-											style="background:{avCol}18;border:1px solid {avCol}44;color:{avCol}">
-											<span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:{avCol}"></span>
-											{p.avancement || 'Non démarré'}
+										<!-- Ligne 2 : badge avancement + métriques -->
+										<div class="mt-1 flex items-center gap-2 flex-wrap">
+											<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+												style="background:{avCol}20;border:1px solid {avCol}50;color:{avCol}">
+												<span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:{avCol}"></span>
+												{avNorm(p.avancement)}
+											</span>
+											{#if p.lineaire_m > 0}
+												<span class="text-[10px] text-blue-300 font-medium">{fmtLin(p.lineaire_m)}</span>
+											{/if}
+											{#if p.montant}
+												<span class="text-[10px] text-emerald-300 font-medium">{fmt(p.montant)}</span>
+											{/if}
 										</div>
 
-										<!-- Métriques linéaire + coût -->
-										{#if p.lineaire_m > 0 || p.montant}
-											<div class="mt-1.5 flex items-center gap-3 text-xs">
-												{#if p.lineaire_m > 0}
-													<span class="text-blue-300 font-medium">{fmtLin(p.lineaire_m)}</span>
-												{/if}
-												{#if p.montant}
-													<span class="text-emerald-300 font-medium">{fmt(p.montant)}</span>
-												{/if}
-											</div>
-										{/if}
-
-										<!-- Dernière étape MOP + barre segmentée -->
+										<!-- Ligne 3 : étape MOP (si dispo) -->
 										{#if lastMop}
-											<div class="mt-1.5 flex items-center gap-1.5">
+											<div class="mt-1 flex items-center gap-1.5">
 												<div class="flex gap-0.5">
 													{#each ETAPES_MOP as etape}
-														<div class="h-1 rounded-full" style="width:11px;background:{(p.etapes_mop ?? []).includes(etape.id) ? avCol : 'rgba(255,255,255,0.1)'}"></div>
+														<div class="h-[3px] rounded-full" style="width:9px;background:{(p.etapes_mop ?? []).includes(etape.id) ? avCol : 'rgba(255,255,255,0.08)'}"></div>
 													{/each}
 												</div>
-												<span class="text-xs text-gray-500 truncate">{lastMop.label}</span>
+												<span class="text-[10px] text-gray-500 truncate">{lastMop.label}</span>
 											</div>
 										{/if}
 
 										<!-- Note -->
 										{#if p.note}
-											<div class="mt-1 text-xs text-gray-600 truncate italic">{p.note}</div>
+											<div class="mt-0.5 text-[10px] text-gray-600 truncate italic">{p.note}</div>
 										{/if}
 
 										<!-- Confirmation suppression -->
@@ -400,7 +425,7 @@
 
 									<!-- Bouton édition -->
 									<button onclick={() => openEdit(f)} title={isEditing ? 'Fermer' : 'Modifier'}
-										class="shrink-0 self-start mt-2 mr-2 p-1.5 rounded-lg transition-all hover:scale-110 {isEditing ? 'text-blue-400 bg-blue-500/10' : 'text-gray-600 hover:text-gray-300 hover:bg-white/5'}">
+										class="shrink-0 self-start mt-1.5 mr-1.5 p-1.5 rounded-lg transition-all hover:scale-110 {isEditing ? 'text-blue-400 bg-blue-500/10' : 'text-gray-700 hover:text-gray-300 hover:bg-white/5'}">
 										{#if isEditing}
 											<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
 										{:else}
