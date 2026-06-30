@@ -32,6 +32,10 @@
 	let drawLayer: import('leaflet').Polyline | null = null;
 	let previewLayer: import('leaflet').Polyline | null = null;
 	let markersLayer: import('leaflet').LayerGroup | null = null;
+	let snapMarker: import('leaflet').CircleMarker | null = null;
+	let snapPoint: [number, number] | null = null;
+	let snapLocked = $state(false); // true = snap forcé sur un nœud, double-clic pour décrocher
+	const SNAP_PX = 15; // pixels de tolérance
 
 	function formatMontant(m: number | null): string {
 		if (m === null || m === undefined) return '\u2014';
@@ -188,23 +192,102 @@
 		} catch(e) {}
 	}
 
+	function snapToNearest(latlng: any): [number, number] | null {
+		if (!editingFeature) return null;
+		const cursor = map.latLngToContainerPoint(latlng);
+		let bestDist = SNAP_PX;
+		let bestPt: [number, number] | null = null;
+		for (const feat of data.features) {
+			if (feat.id === editingFeature.id) continue;
+			for (const geom of feat.geometry.geometries) {
+				for (const [lng, lat] of geom.coordinates) {
+					const pt = map.latLngToContainerPoint([lat, lng]);
+					const dx = pt.x - cursor.x, dy = pt.y - cursor.y;
+					const d = Math.sqrt(dx*dx + dy*dy);
+					if (d < bestDist) { bestDist = d; bestPt = [lat, lng]; }
+				}
+			}
+		}
+		return bestPt;
+	}
+
+	let _ignoreNextClick = false;
+
 	function onMapClick(e: any) {
 		if (editMode !== 'draw') return;
-		const ll: [number, number] = [e.latlng.lat, e.latlng.lng];
+		// Le dblclick génère 2 clics + 1 dblclick — on ignore ces 2 clics
+		if (_ignoreNextClick) { _ignoreNextClick = false; return; }
+		const snapped = snapLocked ? snapPoint : snapToNearest(e.latlng);
+		const ll: [number, number] = snapped ?? [e.latlng.lat, e.latlng.lng];
 		drawPoints.push(ll);
 		(drawLayer as any)?.setLatLngs(drawPoints);
 
-		// Marker sur le point
+		// Marker sur le point (orange si snappé)
+		const isSnapped = snapped !== null;
 		const marker = L.circleMarker(ll, {
-			radius: 5, color: '#fff', weight: 2,
-			fillColor: editingFeature?.properties.couleur ?? '#f59e0b', fillOpacity: 1
+			radius: isSnapped ? 7 : 5,
+			color: isSnapped ? '#f59e0b' : '#fff',
+			weight: 2,
+			fillColor: editingFeature?.properties.couleur ?? '#f59e0b',
+			fillOpacity: 1
 		} as any).addTo(markersLayer!);
 	}
 
+	function onMapDblClick(e: any) {
+		if (editMode !== 'draw') return;
+		L.DomEvent.stop(e);
+		// Annuler les 2 clics parasites déjà enregistrés (le dernier seulement est arrivé)
+		_ignoreNextClick = true;
+		// Retirer le point parasite du simple clic précédent
+		if (drawPoints.length > 0) {
+			drawPoints.pop();
+			(drawLayer as any)?.setLatLngs(drawPoints);
+			const layers: any[] = [];
+			markersLayer?.eachLayer((l: any) => layers.push(l));
+			if (layers.length > 0) markersLayer?.removeLayer(layers[layers.length - 1]);
+		}
+		const nearest = snapToNearest(e.latlng);
+		if (nearest) {
+			// Toggle accrochage
+			snapLocked = !snapLocked;
+			snapPoint = snapLocked ? nearest : null;
+			if (snapMarker) {
+				(snapMarker as any).setStyle(
+					snapLocked
+						? { color: '#22c55e', fillColor: '#22c55e', opacity: 1, fillOpacity: 0.5, radius: 10 }
+						: { color: '#f59e0b', fillColor: '#f59e0b', opacity: 0, fillOpacity: 0, radius: 8 }
+				);
+			}
+		} else {
+			// Pas de nœud proche : valider le segment
+			validateSegment();
+		}
+	}
+
 	function onMapMouseMove(e: any) {
-		if (editMode !== 'draw' || drawPoints.length === 0) return;
+		if (editMode !== 'draw') return;
+		const snapped = snapLocked ? snapPoint : snapToNearest(e.latlng);
+		if (!snapLocked) snapPoint = snapped;
+		const cur: [number, number] = snapped ?? [e.latlng.lat, e.latlng.lng];
+
+		// Indicateur visuel snap
+		if (snapMarker) { snapMarker.setLatLng(cur); }
+		else {
+			snapMarker = L.circleMarker(cur, {
+				radius: 8, color: '#f59e0b', weight: 2.5,
+				fillColor: '#f59e0b', fillOpacity: 0.25
+			} as any).addTo(editGroup!);
+		}
+		if (snapped) {
+			(snapMarker as any).setStyle({ opacity: 1, fillOpacity: 0.4 });
+			map.getContainer().style.cursor = 'pointer';
+		} else {
+			(snapMarker as any).setStyle({ opacity: 0, fillOpacity: 0 });
+			map.getContainer().style.cursor = 'crosshair';
+		}
+
+		if (drawPoints.length === 0) return;
 		const last = drawPoints[drawPoints.length - 1];
-		const cur: [number, number] = [e.latlng.lat, e.latlng.lng];
 		(previewLayer as any)?.setLatLngs([last, cur]);
 	}
 
@@ -239,6 +322,9 @@
 		markersLayer = null;
 		drawLayer = null;
 		previewLayer = null;
+		snapMarker = null;
+		snapPoint = null;
+		snapLocked = false;
 		drawPoints = [];
 		drawSegments = [];
 		editMode = 'none';
@@ -275,7 +361,8 @@
 		}
 
 		const newGeom = { type: 'GeometryCollection', geometries };
-		const { error } = await supabase.from('voies').update({ geometry_modifiee: newGeom }).eq('id', editingFeature.id);
+		const lineaire_m = Math.round(lineaire);
+		const { error } = await supabase.from('voies').update({ geometry_modifiee: newGeom, lineaire_m }).eq('id', editingFeature.id);
 
 		if (!error) {
 			const updated: VoieFeature = {
@@ -313,6 +400,7 @@
 		editGroup = L.layerGroup().addTo(map);
 
 		map.on('click', onMapClick);
+		map.on('dblclick', onMapDblClick);
 		map.on('mousemove', onMapMouseMove);
 
 		map.setView([-20.963, 55.652], 14);

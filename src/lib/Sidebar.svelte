@@ -96,10 +96,11 @@
 
 	async function saveMontant(f: VoieFeature) {
 		saving = true;
-		const val = parseFloat(editMontant.replace(/\s/g, '').replace(',', '.'));
+		const val = parseFloat(String(editMontant).replace(/\s/g, '').replace(',', '.'));
 		if (!isNaN(val)) {
 			const { error } = await supabase.from('voies').update({ montant_modifie: val }).eq('id', f.id);
-			if (!error) onUpdate({ ...f, properties: { ...f.properties, montant: val } });
+			if (error) console.error('Erreur sauvegarde coût:', error);
+			else onUpdate({ ...f, properties: { ...f.properties, montant: val } });
 		}
 		editingMontantId = null; saving = false;
 	}
