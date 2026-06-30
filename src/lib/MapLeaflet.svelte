@@ -74,17 +74,29 @@
 
 	async function loadCommune() {
 		if (!L || !map) return;
+		const MIRRORS = [
+			'https://overpass-api.de/api/interpreter',
+			'https://overpass.kumi.systems/api/interpreter',
+			'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+		];
+		const query = `[out:json][timeout:25];relation(280118);out geom;`;
+		let json: any = null;
+		for (const mirror of MIRRORS) {
+			try {
+				const ctrl = new AbortController();
+				const tid = setTimeout(() => ctrl.abort(), 15000);
+				const res = await fetch(mirror, { method: 'POST', body: query, signal: ctrl.signal });
+				clearTimeout(tid);
+				if (!res.ok) continue;
+				const data = await res.json();
+				if (data?.elements?.length) { json = data; break; }
+			} catch { continue; }
+		}
+		if (!json) { console.warn('Contour commune: tous les miroirs ont échoué'); return; }
 		try {
-			const query = `[out:json][timeout:25];relation(280118);out geom;`;
-			const res = await fetch('https://overpass.kumi.systems/api/interpreter', {
-				method: 'POST',
-				body: query,
-			});
-			const json = await res.json();
 			const rel = json.elements?.[0];
 			if (!rel) return;
 
-			// Collecter les ways par rôle
 			const waysByRole: Record<string, number[][][]> = { outer: [], inner: [] };
 			for (const m of rel.members ?? []) {
 				if (m.type !== 'way' || !m.geometry) continue;
@@ -92,7 +104,6 @@
 				waysByRole[role].push(m.geometry.map((p: any) => [p.lon, p.lat]));
 			}
 
-			// Assembler les ways en anneaux continus par chaînage
 			function assembleRings(ways: number[][][]): number[][][] {
 				const rings: number[][][] = [];
 				const remaining = ways.map(w => [...w]);
@@ -107,7 +118,6 @@
 							const wStart = w[0];
 							const wEnd = w[w.length - 1];
 							const rStart = ring[0];
-							// Comparer avec tolérance
 							const eq = (a: number[], b: number[]) => Math.abs(a[0]-b[0]) < 1e-7 && Math.abs(a[1]-b[1]) < 1e-7;
 							if (eq(rEnd, wStart)) {
 								ring = [...ring, ...w.slice(1)];
@@ -117,9 +127,7 @@
 								ring = [...w, ...ring.slice(1)];
 							} else if (eq(rStart, wStart)) {
 								ring = [...[...w].reverse(), ...ring.slice(1)];
-							} else {
-								continue;
-							}
+							} else { continue; }
 							remaining.splice(i, 1);
 							changed = true;
 							break;
@@ -151,7 +159,6 @@
 			console.warn('Contour commune non chargé:', e);
 		}
 	}
-
 	function switchBasemap(id: BasemapId) {
 		if (!map || !L) return;
 		const bm = BASEMAPS.find(b => b.id === id);
