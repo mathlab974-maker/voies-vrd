@@ -197,14 +197,42 @@
 		const cursor = map.latLngToContainerPoint(latlng);
 		let bestDist = SNAP_PX;
 		let bestPt: [number, number] | null = null;
+
+		// Collecter toutes les géométries : voies voisines + ancien tracé de la voie en cours
+		const allGeoms: [number, number][][] = [];
 		for (const feat of data.features) {
-			if (feat.id === editingFeature.id) continue;
 			for (const geom of feat.geometry.geometries) {
-				for (const [lng, lat] of geom.coordinates) {
-					const pt = map.latLngToContainerPoint([lat, lng]);
-					const dx = pt.x - cursor.x, dy = pt.y - cursor.y;
-					const d = Math.sqrt(dx*dx + dy*dy);
-					if (d < bestDist) { bestDist = d; bestPt = [lat, lng]; }
+				allGeoms.push(geom.coordinates.map(([lng, lat]: [number, number]) => [lat, lng]));
+			}
+		}
+		// Aussi les points déjà posés dans le dessin en cours
+		if (drawPoints.length > 0) allGeoms.push(drawPoints);
+
+		for (const pts of allGeoms) {
+			// Snap sur nœuds
+			for (const pt of pts) {
+				const p = map.latLngToContainerPoint(pt);
+				const dx = p.x - cursor.x, dy = p.y - cursor.y;
+				const d = Math.sqrt(dx*dx + dy*dy);
+				if (d < bestDist) { bestDist = d; bestPt = pt; }
+			}
+			// Snap sur segments (projection orthogonale)
+			for (let i = 0; i < pts.length - 1; i++) {
+				const a = map.latLngToContainerPoint(pts[i]);
+				const b = map.latLngToContainerPoint(pts[i + 1]);
+				const abx = b.x - a.x, aby = b.y - a.y;
+				const len2 = abx*abx + aby*aby;
+				if (len2 === 0) continue;
+				const t = Math.max(0, Math.min(1, ((cursor.x - a.x)*abx + (cursor.y - a.y)*aby) / len2));
+				const proj = { x: a.x + t*abx, y: a.y + t*aby };
+				const dx = proj.x - cursor.x, dy = proj.y - cursor.y;
+				const d = Math.sqrt(dx*dx + dy*dy);
+				if (d < bestDist) {
+					bestDist = d;
+					// Interpoler la coordonnée géographique
+					const lat = pts[i][0] + t * (pts[i+1][0] - pts[i][0]);
+					const lng = pts[i][1] + t * (pts[i+1][1] - pts[i][1]);
+					bestPt = [lat, lng];
 				}
 			}
 		}
