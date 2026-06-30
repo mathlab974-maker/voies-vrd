@@ -1,0 +1,184 @@
+{
+  "commune": "Saint-André (La Réunion)",
+  "nb_voies": 104,
+  "montant_total": 31473823,
+  "par_secteur": [
+    {
+      "secteur": "Petit Bazar et centre ville",
+      "nb": 18,
+      "montant": 4509598,
+      "avancement": {
+        "En cours": 1,
+        "Non démarré": 2,
+        "À planifier": 15
+      },
+      "statuts": {
+        "multi_trace": 5,
+        "trace": 9,
+        "approx_trace": 4
+      }
+    },
+    {
+      "secteur": "Centre ville",
+      "nb": 18,
+      "montant": 4263451,
+      "avancement": {
+        "Terminé": 3,
+        "Non démarré": 3,
+        "En cours": 1,
+        "À planifier": 11
+      },
+      "statuts": {
+        "trace": 12,
+        "multi_trace": 4,
+        "approx_trace": 2
+      }
+    },
+    {
+      "secteur": "Ravine Creuse",
+      "nb": 6,
+      "montant": 4164890,
+      "avancement": {
+        "Terminé": 1,
+        "Non démarré": 1,
+        "À planifier": 4
+      },
+      "statuts": {
+        "trace": 4,
+        "multi_trace": 2
+      }
+    },
+    {
+      "secteur": "Cambuston",
+      "nb": 16,
+      "montant": 3827385,
+      "avancement": {
+        "En cours": 1,
+        "Non démarré": 1,
+        "Terminé": 1,
+        "À planifier": 13
+      },
+      "statuts": {
+        "multi_trace": 2,
+        "trace": 10,
+        "approx_trace": 4
+      }
+    },
+    {
+      "secteur": "Champ Borne",
+      "nb": 18,
+      "montant": 3694151,
+      "avancement": {
+        "Terminé": 4,
+        "Non démarré": 1,
+        "À planifier": 13
+      },
+      "statuts": {
+        "trace": 13,
+        "approx_trace": 4,
+        "multi_trace": 1
+      }
+    },
+    {
+      "secteur": "Rivière du Mat les Bas",
+      "nb": 6,
+      "montant": 3689349,
+      "avancement": {
+        "Terminé": 2,
+        "À planifier": 4
+      },
+      "statuts": {
+        "trace": 4,
+        "approx_trace": 2
+      }
+    },
+    {
+      "secteur": "Bras des chevrettes et Dioré",
+      "nb": 10,
+      "montant": 3405471,
+      "avancement": {
+        "Terminé": 1,
+        "En cours": 2,
+        "À planifier": 7
+      },
+      "statuts": {
+        "trace": 7,
+        "multi_trace": 2,
+        "approx_trace": 1
+      }
+    },
+    {
+      "secteur": "Milles Roches",
+      "nb": 10,
+      "montant": 2432498,
+      "avancement": {
+        "Terminé": 1,
+        "En cours": 1,
+        "À planifier": 8
+      },
+      "statuts": {
+        "approx_trace": 3,
+        "multi_trace": 3,
+        "trace": 4
+      }
+    },
+    {
+      "secteur": "Cressonnière",
+      "nb": 1,
+      "montant": 1302000,
+      "avancement": {
+        "À planifier": 1
+      },
+      "statuts": {
+        "multi_trace": 1
+      }
+    },
+    {
+      "secteur": "Rivière du Mat les Hauts",
+      "nb": 1,
+      "montant": 185030,
+      "avancement": {
+        "Terminé": 1
+      },
+      "statuts": {
+        "multi_trace": 1
+      }
+    }
+  ],
+  "par_avancement": [
+    {
+      "avancement": "Terminé",
+      "nb": 14,
+      "montant": 2415967
+    },
+    {
+      "avancement": "En cours",
+      "nb": 6,
+      "montant": 2352480
+    },
+    {
+      "avancement": "Non démarré",
+      "nb": 8,
+      "montant": 2739867
+    },
+    {
+      "avancement": "À planifier",
+      "nb": 76,
+      "montant": 23965509
+    }
+  ],
+  "par_statut": [
+    {
+      "statut": "trace",
+      "nb": 63
+    },
+    {
+      "statut": "multi_trace",
+      "nb": 21
+    },
+    {
+      "statut": "approx_trace",
+      "nb": 20
+    }
+  ]
+}
