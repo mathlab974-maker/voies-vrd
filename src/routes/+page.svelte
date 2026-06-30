@@ -60,6 +60,13 @@
 		filteredIds = new Set([...filteredIds, newFeature.id]);
 		selectedFeature = newFeature;
 	}
+
+	function handleDelete(id: number) {
+		if (!data) return;
+		data = { ...data, features: data.features.filter(f => f.id !== id) };
+		filteredIds = new Set([...filteredIds].filter(i => i !== id));
+		if (selectedFeature?.id === id) selectedFeature = null;
+	}
 </script>
 
 {#if data}
@@ -72,6 +79,7 @@
 			onSelect={(f) => { selectedFeature = f; }}
 			onUpdate={handleUpdate}
 			onAdd={handleAdd}
+			onDelete={handleDelete}
 		/>
 		<div class="flex-1 relative">
 			<MapLeaflet
