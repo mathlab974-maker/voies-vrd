@@ -53,6 +53,13 @@
 		};
 		if (selectedFeature?.id === updatedFeature.id) selectedFeature = updatedFeature;
 	}
+
+	function handleAdd(newFeature: VoieFeature) {
+		if (!data) return;
+		data = { ...data, features: [...data.features, newFeature] };
+		filteredIds = new Set([...filteredIds, newFeature.id]);
+		selectedFeature = newFeature;
+	}
 </script>
 
 {#if data}
@@ -64,6 +71,7 @@
 			onFilterChange={(ids) => { filteredIds = ids; }}
 			onSelect={(f) => { selectedFeature = f; }}
 			onUpdate={handleUpdate}
+			onAdd={handleAdd}
 		/>
 		<div class="flex-1 relative">
 			<MapLeaflet
