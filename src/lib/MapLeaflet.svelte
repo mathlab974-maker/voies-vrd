@@ -45,14 +45,26 @@
 	let ready = $state(false);
 
 	const BASEMAPS = [
-		{ id: 'dark',      label: 'Dark',       icon: '🌑', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',                                              attribution: '&copy; OpenStreetMap &copy; CARTO',                        maxZoom: 20, subdomains: 'abcd' },
-		{ id: 'osm',       label: 'Plan OSM',   icon: '🗺', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',                                                             attribution: '&copy; OpenStreetMap contributors',                        maxZoom: 20, subdomains: '' },
-		{ id: 'satellite', label: 'Satellite',  icon: '🛰', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',             attribution: '&copy; Esri',                                              maxZoom: 19, subdomains: '' },
-		{ id: 'esri_topo', label: 'Topo Esri',  icon: '⛰', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',                  attribution: '&copy; Esri',                                              maxZoom: 19, subdomains: '' },
-		{ id: 'topo',      label: 'OTM Topo',   icon: '🏔', url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',                                                               attribution: '&copy; OpenStreetMap &copy; OpenTopoMap',                  maxZoom: 17, subdomains: '' },
-		{ id: 'light',     label: 'Clair',      icon: '☀️', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',                                             attribution: '&copy; OpenStreetMap &copy; CARTO',                        maxZoom: 20, subdomains: 'abcd' },
-		{ id: 'voyager',   label: 'Voyager',    icon: '🦭', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',                                    attribution: '&copy; OpenStreetMap &copy; CARTO',                        maxZoom: 20, subdomains: 'abcd' },
-		{ id: 'esri_img',  label: 'Hybrid',     icon: '🌍', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',               attribution: '&copy; Esri',                                              maxZoom: 19, subdomains: '' },
+		// --- Sombres ---
+		{ id: 'dark',        label: 'Dark',            icon: '🌑', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',                                                          attribution: '&copy; OpenStreetMap &copy; CARTO',               maxZoom: 20, subdomains: 'abcd' },
+		{ id: 'dark_nolabel',label: 'Dark sans labels', icon: '⬛', url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',                                                    attribution: '&copy; OpenStreetMap &copy; CARTO',               maxZoom: 20, subdomains: 'abcd' },
+		// --- Clairs ---
+		{ id: 'light',       label: 'Clair',           icon: '☀️', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',                                                         attribution: '&copy; OpenStreetMap &copy; CARTO',               maxZoom: 20, subdomains: 'abcd' },
+		{ id: 'voyager',     label: 'Voyager',         icon: '🧭', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',                                               attribution: '&copy; OpenStreetMap &copy; CARTO',               maxZoom: 20, subdomains: 'abcd' },
+		{ id: 'osm',         label: 'Plan OSM',        icon: '🗺', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',                                                                         attribution: '&copy; OpenStreetMap contributors',               maxZoom: 20, subdomains: '' },
+		{ id: 'osm_fr',      label: 'OSM France',      icon: '🇫🇷', url: 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png',                                                              attribution: '&copy; OpenStreetMap France',                     maxZoom: 20, subdomains: 'abc' },
+		{ id: 'cycle',       label: 'Cyclable',        icon: '🚴', url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',                                                      attribution: '&copy; CyclOSM &copy; OpenStreetMap',             maxZoom: 20, subdomains: 'abc' },
+		// --- Satellite / Photo ---
+		{ id: 'satellite',   label: 'Satellite Esri',  icon: '🛰', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',                         attribution: '&copy; Esri',                                     maxZoom: 19, subdomains: '' },
+		{ id: 'esri_clarity',label: 'Clarity Esri',   icon: '🔭', url: 'https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',                     attribution: '&copy; Esri',                                     maxZoom: 19, subdomains: '' },
+		// --- Topographiques ---
+		{ id: 'esri_topo',   label: 'Topo Esri',      icon: '⛰', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',                         attribution: '&copy; Esri',                                     maxZoom: 19, subdomains: '' },
+		{ id: 'topo',        label: 'OTM Topo',       icon: '🏔', url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',                                                                            attribution: '&copy; OpenStreetMap &copy; OpenTopoMap',         maxZoom: 17, subdomains: '' },
+		{ id: 'esri_shaded', label: 'Relief Esri',    icon: '🌄', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',                   attribution: '&copy; Esri',                                     maxZoom: 13, subdomains: '' },
+		// --- Hybrides / spéciaux ---
+		{ id: 'esri_street', label: 'Street Esri',    icon: '🏙', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',                      attribution: '&copy; Esri',                                     maxZoom: 19, subdomains: '' },
+		{ id: 'esri_ocean',  label: 'Océan Esri',     icon: '�', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',                attribution: '&copy; Esri',                                     maxZoom: 13, subdomains: '' },
+		{ id: 'watercolor',  label: 'Aquarelle',      icon: '🎨', url: 'https://watercolormaps.collection.cooperhewitt.org/tile/watercolor/{z}/{x}/{y}.jpg',                                     attribution: '&copy; Stamen &copy; OpenStreetMap',              maxZoom: 16, subdomains: '' },
 	] as const;
 	type BasemapId = typeof BASEMAPS[number]['id'];
 	let currentBasemap = $state<BasemapId>('dark');
@@ -564,19 +576,30 @@
 			<!-- Menu déroulant -->
 			{#if basemapMenuOpen}
 				<div class="absolute top-full right-0 mt-1.5 rounded-xl overflow-hidden"
-					style="background:rgba(13,17,23,0.96);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.6);min-width:150px">
-					{#each BASEMAPS as bm}
-						<button
-							onclick={() => switchBasemap(bm.id)}
-							class="w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors hover:bg-white/5 text-left"
-							style={currentBasemap === bm.id ? 'color:#a5b4fc;background:rgba(99,102,241,0.12)' : 'color:#94a3b8'}>
-							<span class="text-sm leading-none shrink-0">{bm.icon}</span>
-							<span class="font-medium">{bm.label}</span>
-							{#if currentBasemap === bm.id}
-								<svg class="w-3 h-3 ml-auto shrink-0 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
-							{/if}
-						</button>
+					style="background:rgba(13,17,23,0.96);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.6);min-width:175px;max-height:420px;overflow-y:auto">
+					{#each ['Sombres','Clairs','Satellite / Photo','Topographiques','Hybrides / Spéciaux'] as group}
+						{@const groupBms = BASEMAPS.filter(b => (
+							group === 'Sombres'              ? ['dark','dark_nolabel'].includes(b.id) :
+							group === 'Clairs'               ? ['light','voyager','osm','osm_fr','cycle'].includes(b.id) :
+							group === 'Satellite / Photo'    ? ['satellite','esri_clarity'].includes(b.id) :
+							group === 'Topographiques'       ? ['esri_topo','topo','esri_shaded'].includes(b.id) :
+							                                  ['esri_street','esri_ocean','watercolor'].includes(b.id)
+						))}
+						<div class="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider" style="color:#4b5563">{group}</div>
+						{#each groupBms as bm}
+							<button
+								onclick={() => switchBasemap(bm.id)}
+								class="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs transition-colors hover:bg-white/5 text-left"
+								style={currentBasemap === bm.id ? 'color:#a5b4fc;background:rgba(99,102,241,0.12)' : 'color:#94a3b8'}>
+								<span class="text-sm leading-none shrink-0">{bm.icon}</span>
+								<span class="font-medium">{bm.label}</span>
+								{#if currentBasemap === bm.id}
+									<svg class="w-3 h-3 ml-auto shrink-0 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+								{/if}
+							</button>
+						{/each}
 					{/each}
+					<div class="h-1"></div>
 				</div>
 			{/if}
 		</div>
