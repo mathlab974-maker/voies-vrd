@@ -20,23 +20,25 @@
 	let editGroup: import('leaflet').LayerGroup;
 	let ready = $state(false);
 
-	// Mode edition
 	type EditMode = 'none' | 'draw' | 'edit';
 	let editMode = $state<EditMode>('none');
 	let editingFeature = $state<VoieFeature | null>(null);
 	let savingTrace = $state(false);
 
-	// Points du segment en cours de dessin
-	let drawPoints = $state<[number, number][]>([]);          // [lat, lng]
-	let drawSegments = $state<[number, number][][]>([]);       // segments deja fermes
+	// Segments validés (chacun = une LineString)
+	let segments = $state<[number, number][][]>([]);
+	// Points du tronçon en cours de dessin
+	let currentPts = $state<[number, number][]>([]);
+
 	let drawLayer: import('leaflet').Polyline | null = null;
 	let previewLayer: import('leaflet').Polyline | null = null;
 	let markersLayer: import('leaflet').LayerGroup | null = null;
 	let snapMarker: import('leaflet').CircleMarker | null = null;
 	let snapPoint: [number, number] | null = null;
-	let snapLocked = $state(false); // true = snap forcé sur un nœud, double-clic pour décrocher
-	const SNAP_PX = 15; // pixels de tolérance
 
+	const SNAP_PX = 14;
+
+	// ---- Popup ----
 	function formatMontant(m: number | null): string {
 		if (m === null || m === undefined) return '\u2014';
 		return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(m);
@@ -62,6 +64,7 @@
 		</div>`;
 	}
 
+	// ---- Rendu carte normale ----
 	function drawLayers(features = data.features, filtered = filteredIds, selId = selectedId) {
 		if (!layerGroup || editMode !== 'none') return;
 		layerGroup.clearLayers();
@@ -73,9 +76,7 @@
 			const opacity = isSelected ? 1 : 0.82;
 			for (const geom of f.geometry.geometries) {
 				const coords = geom.coordinates.map(([lng, lat]: [number, number]) => [lat, lng] as [number, number]);
-				if (isSelected) {
-					L.polyline(coords, { color: '#fff', weight: weight + 4, opacity: 0.18 }).addTo(layerGroup);
-				}
+				if (isSelected) L.polyline(coords, { color: '#fff', weight: weight + 4, opacity: 0.18 }).addTo(layerGroup);
 				const line = L.polyline(coords, { color, weight, opacity, lineCap: 'round' });
 				line.bindPopup(popupHtml(f), { maxWidth: 320 });
 				line.on('click', () => onSelect(f));
@@ -84,129 +85,24 @@
 		}
 	}
 
-	// ---- Mode EDIT (modifier les noeuds existants) ----
-	function startEdit(f: VoieFeature) {
-		editingFeature = f;
-		editMode = 'edit';
-		setupEditCanvas(f);
-	}
-
-	// ---- Mode DRAW (retracer from scratch) ----
-	function startDraw(f: VoieFeature) {
-		editingFeature = f;
-		editMode = 'draw';
-		drawPoints = [];
-		drawSegments = [];
-		setupDrawCanvas(f);
-	}
-
-	function setupEditCanvas(f: VoieFeature) {
-		layerGroup.clearLayers();
-		editGroup.clearLayers();
-
-		// Fond gris pour les autres voies
-		for (const feat of data.features) {
-			if (!filteredIds.has(feat.id) || feat.id === f.id) continue;
-			for (const geom of feat.geometry.geometries) {
-				const coords = geom.coordinates.map(([lng, lat]: [number, number]) => [lat, lng] as [number, number]);
-				L.polyline(coords, { color: '#334155', weight: 2, opacity: 0.4 }).addTo(layerGroup);
-			}
-		}
-
-		// Charger les segments de la voie comme markers draggables
-		markersLayer = L.layerGroup().addTo(editGroup);
-		drawSegments = [];
-		for (const geom of f.geometry.geometries) {
-			const pts: [number, number][] = geom.coordinates.map(([lng, lat]: [number, number]) => [lat, lng]);
-			drawSegments.push(pts);
-			renderEditSegment(pts, drawSegments.length - 1, f.properties.couleur);
-		}
-
-		const bounds = (editGroup as any).getBounds();
-		if (bounds.isValid()) map.fitBounds(bounds, { padding: [80, 80] });
-	}
-
-	function renderEditSegment(pts: [number, number][], segIdx: number, color: string) {
-		if (!markersLayer) return;
-		// Ligne du segment
-		const line = L.polyline(pts, { color, weight: 4, opacity: 1 });
-		line.addTo(markersLayer);
-		// Markers draggables sur chaque noeud
-		pts.forEach((pt, i) => {
-			const marker = L.circleMarker(pt, {
-				radius: 7,
-				color: '#fff',
-				weight: 2,
-				fillColor: color,
-				fillOpacity: 1,
-			} as any);
-			marker.addTo(markersLayer!);
-			// Drag via mousedown/mousemove
-			(marker as any).on('mousedown', (e: any) => {
-				L.DomEvent.stop(e);
-				map.dragging.disable();
-				map.on('mousemove', (mv: any) => {
-					const ll: [number, number] = [mv.latlng.lat, mv.latlng.lng];
-					drawSegments[segIdx][i] = ll;
-					marker.setLatLng(ll);
-					(line as any).setLatLngs(drawSegments[segIdx]);
-				});
-				map.once('mouseup', () => {
-					map.dragging.enable();
-					map.off('mousemove');
-				});
-			});
-		});
-	}
-
-	function setupDrawCanvas(f: VoieFeature) {
-		layerGroup.clearLayers();
-		editGroup.clearLayers();
-
-		// Fond gris pour les autres voies
-		for (const feat of data.features) {
-			if (!filteredIds.has(feat.id) || feat.id === f.id) continue;
-			for (const geom of feat.geometry.geometries) {
-				const coords = geom.coordinates.map(([lng, lat]: [number, number]) => [lat, lng] as [number, number]);
-				L.polyline(coords, { color: '#334155', weight: 2, opacity: 0.4 }).addTo(layerGroup);
-			}
-		}
-
-		// Afficher l'ancien trace en pointilles pour reference
-		for (const geom of f.geometry.geometries) {
-			const coords = geom.coordinates.map(([lng, lat]: [number, number]) => [lat, lng] as [number, number]);
-			L.polyline(coords, { color: f.properties.couleur, weight: 2, opacity: 0.3, dashArray: '6,6' }).addTo(layerGroup);
-		}
-
-		markersLayer = L.layerGroup().addTo(editGroup);
-		drawLayer = L.polyline([], { color: f.properties.couleur, weight: 4 }).addTo(editGroup);
-		previewLayer = L.polyline([], { color: f.properties.couleur, weight: 2, dashArray: '4,4', opacity: 0.7 }).addTo(editGroup);
-
-		map.getContainer().style.cursor = 'crosshair';
-
-		const bounds = (editGroup as any).getBounds?.();
-		// Centrer sur le tracé existant s'il existe
-		try {
-			const existingBounds = L.geoJSON({ type: 'GeometryCollection', geometries: f.geometry.geometries } as any).getBounds();
-			if (existingBounds.isValid()) map.fitBounds(existingBounds, { padding: [80, 80] });
-		} catch(e) {}
-	}
-
+	// ---- Snap ----
 	function snapToNearest(latlng: any): [number, number] | null {
 		if (!editingFeature) return null;
 		const cursor = map.latLngToContainerPoint(latlng);
 		let bestDist = SNAP_PX;
 		let bestPt: [number, number] | null = null;
 
-		// Collecter toutes les géométries : voies voisines + ancien tracé de la voie en cours
 		const allGeoms: [number, number][][] = [];
+		// Toutes les voies (y compris la voie en cours)
 		for (const feat of data.features) {
 			for (const geom of feat.geometry.geometries) {
 				allGeoms.push(geom.coordinates.map(([lng, lat]: [number, number]) => [lat, lng]));
 			}
 		}
-		// Aussi les points déjà posés dans le dessin en cours
-		if (drawPoints.length > 0) allGeoms.push(drawPoints);
+		// Segments déjà validés dans la session en cours
+		for (const seg of segments) allGeoms.push(seg);
+		// Points du tronçon en cours
+		if (currentPts.length > 0) allGeoms.push(currentPts);
 
 		for (const pts of allGeoms) {
 			// Snap sur nœuds
@@ -216,7 +112,7 @@
 				const d = Math.sqrt(dx*dx + dy*dy);
 				if (d < bestDist) { bestDist = d; bestPt = pt; }
 			}
-			// Snap sur segments (projection orthogonale)
+			// Snap sur segments
 			for (let i = 0; i < pts.length - 1; i++) {
 				const a = map.latLngToContainerPoint(pts[i]);
 				const b = map.latLngToContainerPoint(pts[i + 1]);
@@ -229,134 +125,197 @@
 				const d = Math.sqrt(dx*dx + dy*dy);
 				if (d < bestDist) {
 					bestDist = d;
-					// Interpoler la coordonnée géographique
-					const lat = pts[i][0] + t * (pts[i+1][0] - pts[i][0]);
-					const lng = pts[i][1] + t * (pts[i+1][1] - pts[i][1]);
-					bestPt = [lat, lng];
+					bestPt = [pts[i][0] + t*(pts[i+1][0]-pts[i][0]), pts[i][1] + t*(pts[i+1][1]-pts[i][1])];
 				}
 			}
 		}
 		return bestPt;
 	}
 
+	// ---- Mode EDIT nœuds ----
+	function startEdit(f: VoieFeature) {
+		editingFeature = f;
+		editMode = 'edit';
+		layerGroup.clearLayers();
+		editGroup.clearLayers();
+
+		// Fond gris autres voies
+		for (const feat of data.features) {
+			if (!filteredIds.has(feat.id) || feat.id === f.id) continue;
+			for (const geom of feat.geometry.geometries) {
+				const coords = geom.coordinates.map(([lng, lat]: [number, number]) => [lat, lng] as [number, number]);
+				L.polyline(coords, { color: '#334155', weight: 2, opacity: 0.4 }).addTo(layerGroup);
+			}
+		}
+
+		markersLayer = L.layerGroup().addTo(editGroup);
+		segments = [];
+		for (const geom of f.geometry.geometries) {
+			const pts: [number, number][] = geom.coordinates.map(([lng, lat]: [number, number]) => [lat, lng]);
+			segments.push(pts);
+			renderEditSegment(pts, segments.length - 1, f.properties.couleur);
+		}
+
+		try {
+			const b = (markersLayer as any).getBounds();
+			if (b.isValid()) map.fitBounds(b, { padding: [80, 80] });
+		} catch(e) {}
+	}
+
+	function renderEditSegment(pts: [number, number][], segIdx: number, color: string) {
+		if (!markersLayer) return;
+		const line = L.polyline(pts, { color, weight: 4, opacity: 1 });
+		line.addTo(markersLayer);
+		pts.forEach((pt, i) => {
+			const marker = L.circleMarker(pt, { radius: 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 } as any);
+			marker.addTo(markersLayer!);
+			(marker as any).on('mousedown', (e: any) => {
+				L.DomEvent.stop(e);
+				map.dragging.disable();
+				map.on('mousemove', (mv: any) => {
+					const ll: [number, number] = [mv.latlng.lat, mv.latlng.lng];
+					segments[segIdx][i] = ll;
+					marker.setLatLng(ll);
+					(line as any).setLatLngs(segments[segIdx]);
+				});
+				map.once('mouseup', () => { map.dragging.enable(); map.off('mousemove'); });
+			});
+		});
+	}
+
+	// ---- Mode DRAW : ajout de tronçons sur tracé existant ----
+	function startDraw(f: VoieFeature) {
+		editingFeature = f;
+		editMode = 'draw';
+		currentPts = [];
+		layerGroup.clearLayers();
+		editGroup.clearLayers();
+
+		// Fond gris autres voies
+		for (const feat of data.features) {
+			if (!filteredIds.has(feat.id) || feat.id === f.id) continue;
+			for (const geom of feat.geometry.geometries) {
+				const coords = geom.coordinates.map(([lng, lat]: [number, number]) => [lat, lng] as [number, number]);
+				L.polyline(coords, { color: '#334155', weight: 2, opacity: 0.35 }).addTo(layerGroup);
+			}
+		}
+
+		// Charger le tracé existant comme segments éditables (base de départ)
+		markersLayer = L.layerGroup().addTo(editGroup);
+		segments = [];
+		for (const geom of f.geometry.geometries) {
+			const pts: [number, number][] = geom.coordinates.map(([lng, lat]: [number, number]) => [lat, lng]);
+			segments.push(pts);
+		}
+		redrawSegments(f.properties.couleur);
+
+		drawLayer = L.polyline([], { color: f.properties.couleur, weight: 4 }).addTo(editGroup);
+		previewLayer = L.polyline([], { color: f.properties.couleur, weight: 2, dashArray: '5,5', opacity: 0.7 }).addTo(editGroup);
+		snapMarker = L.circleMarker([0,0], { radius: 9, color: '#f59e0b', weight: 2.5, fillColor: '#f59e0b', fillOpacity: 0, opacity: 0 } as any).addTo(editGroup);
+
+		map.getContainer().style.cursor = 'crosshair';
+
+		try {
+			const existingBounds = L.geoJSON({ type: 'GeometryCollection', geometries: f.geometry.geometries } as any).getBounds();
+			if (existingBounds.isValid()) map.fitBounds(existingBounds, { padding: [80, 80] });
+		} catch(e) {}
+	}
+
+	function redrawSegments(color: string) {
+		if (!markersLayer) return;
+		markersLayer.clearLayers();
+		segments.forEach((seg, si) => {
+			L.polyline(seg, { color, weight: 4, opacity: 0.9 }).addTo(markersLayer!);
+			// Nœuds
+			seg.forEach(pt => {
+				L.circleMarker(pt, { radius: 5, color: '#fff', weight: 1.5, fillColor: color, fillOpacity: 0.9 } as any).addTo(markersLayer!);
+			});
+		});
+	}
+
+	// Valider le tronçon en cours → devient un segment
+	function commitCurrent() {
+		if (currentPts.length < 2) return;
+		segments = [...segments, [...currentPts]];
+		currentPts = [];
+		(drawLayer as any)?.setLatLngs([]);
+		(previewLayer as any)?.setLatLngs([]);
+		redrawSegments(editingFeature?.properties.couleur ?? '#f59e0b');
+	}
+
+	// Supprimer un segment par index
+	function removeSegment(i: number) {
+		segments = segments.filter((_, idx) => idx !== i);
+		redrawSegments(editingFeature?.properties.couleur ?? '#f59e0b');
+	}
+
+	// Undo dernier point du tronçon en cours
+	function undoLastPoint() {
+		if (editMode !== 'draw' || currentPts.length === 0) return;
+		currentPts = currentPts.slice(0, -1);
+		(drawLayer as any)?.setLatLngs(currentPts);
+	}
+
+	// ---- Événements carte ----
 	let _ignoreNextClick = false;
 
 	function onMapClick(e: any) {
 		if (editMode !== 'draw') return;
-		// Le dblclick génère 2 clics + 1 dblclick — on ignore ces 2 clics
 		if (_ignoreNextClick) { _ignoreNextClick = false; return; }
-		const snapped = snapLocked ? snapPoint : snapToNearest(e.latlng);
+		const snapped = snapToNearest(e.latlng);
 		const ll: [number, number] = snapped ?? [e.latlng.lat, e.latlng.lng];
-		drawPoints.push(ll);
-		(drawLayer as any)?.setLatLngs(drawPoints);
+		currentPts = [...currentPts, ll];
+		(drawLayer as any)?.setLatLngs(currentPts);
 
-		// Marker sur le point (orange si snappé)
-		const isSnapped = snapped !== null;
-		const marker = L.circleMarker(ll, {
-			radius: isSnapped ? 7 : 5,
-			color: isSnapped ? '#f59e0b' : '#fff',
+		// Marker visuel
+		L.circleMarker(ll, {
+			radius: snapped ? 7 : 5,
+			color: snapped ? '#f59e0b' : '#fff',
 			weight: 2,
 			fillColor: editingFeature?.properties.couleur ?? '#f59e0b',
 			fillOpacity: 1
-		} as any).addTo(markersLayer!);
+		} as any).addTo(editGroup!);
 	}
 
 	function onMapDblClick(e: any) {
 		if (editMode !== 'draw') return;
 		L.DomEvent.stop(e);
-		// Annuler les 2 clics parasites déjà enregistrés (le dernier seulement est arrivé)
 		_ignoreNextClick = true;
-		// Retirer le point parasite du simple clic précédent
-		if (drawPoints.length > 0) {
-			drawPoints.pop();
-			(drawLayer as any)?.setLatLngs(drawPoints);
-			const layers: any[] = [];
-			markersLayer?.eachLayer((l: any) => layers.push(l));
-			if (layers.length > 0) markersLayer?.removeLayer(layers[layers.length - 1]);
+		// Retirer le point du simple-clic parasite
+		if (currentPts.length > 0) {
+			currentPts = currentPts.slice(0, -1);
+			(drawLayer as any)?.setLatLngs(currentPts);
 		}
-		const nearest = snapToNearest(e.latlng);
-		if (nearest) {
-			// Toggle accrochage
-			snapLocked = !snapLocked;
-			snapPoint = snapLocked ? nearest : null;
-			if (snapMarker) {
-				(snapMarker as any).setStyle(
-					snapLocked
-						? { color: '#22c55e', fillColor: '#22c55e', opacity: 1, fillOpacity: 0.5, radius: 10 }
-						: { color: '#f59e0b', fillColor: '#f59e0b', opacity: 0, fillOpacity: 0, radius: 8 }
-				);
-			}
-		} else {
-			// Pas de nœud proche : valider le segment
-			validateSegment();
-		}
+		// Valider le tronçon en cours
+		commitCurrent();
 	}
 
 	function onMapMouseMove(e: any) {
 		if (editMode !== 'draw') return;
-		const snapped = snapLocked ? snapPoint : snapToNearest(e.latlng);
-		if (!snapLocked) snapPoint = snapped;
+		const snapped = snapToNearest(e.latlng);
+		snapPoint = snapped;
 		const cur: [number, number] = snapped ?? [e.latlng.lat, e.latlng.lng];
 
-		// Indicateur visuel snap
-		if (snapMarker) { snapMarker.setLatLng(cur); }
-		else {
-			snapMarker = L.circleMarker(cur, {
-				radius: 8, color: '#f59e0b', weight: 2.5,
-				fillColor: '#f59e0b', fillOpacity: 0.25
-			} as any).addTo(editGroup!);
+		if (snapMarker) {
+			snapMarker.setLatLng(cur);
+			(snapMarker as any).setStyle(snapped
+				? { opacity: 1, fillOpacity: 0.35, radius: 9 }
+				: { opacity: 0, fillOpacity: 0 });
 		}
-		if (snapped) {
-			(snapMarker as any).setStyle({ opacity: 1, fillOpacity: 0.4 });
-			map.getContainer().style.cursor = 'pointer';
-		} else {
-			(snapMarker as any).setStyle({ opacity: 0, fillOpacity: 0 });
-			map.getContainer().style.cursor = 'crosshair';
-		}
+		map.getContainer().style.cursor = snapped ? 'pointer' : 'crosshair';
 
-		if (drawPoints.length === 0) return;
-		const last = drawPoints[drawPoints.length - 1];
+		if (currentPts.length === 0) return;
+		const last = currentPts[currentPts.length - 1];
 		(previewLayer as any)?.setLatLngs([last, cur]);
 	}
 
-	function undoLastPoint() {
-		if (editMode !== 'draw' || drawPoints.length === 0) return;
-		drawPoints.pop();
-		(drawLayer as any)?.setLatLngs(drawPoints);
-		// Supprimer le dernier marker
-		const layers: any[] = [];
-		markersLayer?.eachLayer((l: any) => layers.push(l));
-		if (layers.length > 0) markersLayer?.removeLayer(layers[layers.length - 1]);
-	}
-
-	function validateSegment() {
-		if (editMode !== 'draw' || drawPoints.length < 2) return;
-		drawSegments.push([...drawPoints]);
-		drawPoints = [];
-		(drawLayer as any)?.setLatLngs([]);
-		(previewLayer as any)?.setLatLngs([]);
-		markersLayer?.clearLayers();
-		// Redessiner tous les segments valides
-		for (const seg of drawSegments) {
-			L.polyline(seg, { color: editingFeature?.properties.couleur ?? '#f59e0b', weight: 4 }).addTo(markersLayer!);
-		}
-	}
-
+	// ---- Cancel / Save ----
 	function cancelEdit() {
 		map.getContainer().style.cursor = '';
-		map.off('click', onMapClick);
-		map.off('mousemove', onMapMouseMove);
 		editGroup.clearLayers();
-		markersLayer = null;
-		drawLayer = null;
-		previewLayer = null;
-		snapMarker = null;
-		snapPoint = null;
-		snapLocked = false;
-		drawPoints = [];
-		drawSegments = [];
-		editMode = 'none';
-		editingFeature = null;
+		markersLayer = null; drawLayer = null; previewLayer = null; snapMarker = null; snapPoint = null;
+		currentPts = []; segments = [];
+		editMode = 'none'; editingFeature = null;
 		drawLayers(data.features, filteredIds, selectedId);
 	}
 
@@ -364,18 +323,18 @@
 		if (!editingFeature) return;
 		savingTrace = true;
 
-		// En mode draw : valider le segment en cours si >= 2 points
-		if (editMode === 'draw' && drawPoints.length >= 2) validateSegment();
+		// Valider le tronçon en cours si assez de points
+		if (editMode === 'draw' && currentPts.length >= 2) commitCurrent();
 
-		const allSegments = drawSegments;
-		if (allSegments.length === 0) { savingTrace = false; cancelEdit(); return; }
+		const allSegs = segments;
+		if (allSegs.length === 0) { savingTrace = false; cancelEdit(); return; }
 
-		const geometries = allSegments.map(seg => ({
+		const geometries = allSegs.map(seg => ({
 			type: 'LineString',
 			coordinates: seg.map(([lat, lng]) => [lng, lat])
 		}));
 
-		// Calculer lineaire
+		// Calcul linéaire (Haversine)
 		const R = 6371000;
 		let lineaire = 0;
 		for (const g of geometries) {
@@ -396,41 +355,27 @@
 			const updated: VoieFeature = {
 				...editingFeature,
 				geometry: newGeom as any,
-				properties: { ...editingFeature.properties, lineaire_m: Math.round(lineaire) }
+				properties: { ...editingFeature.properties, lineaire_m }
 			};
 			onUpdate(updated);
 			onSelect(updated);
+		} else {
+			console.error('Erreur sauvegarde tracé:', error);
 		}
 
-		map.getContainer().style.cursor = '';
-		map.off('click', onMapClick);
-		map.off('mousemove', onMapMouseMove);
-		editGroup.clearLayers();
-		markersLayer = null;
-		drawLayer = null;
-		previewLayer = null;
-		drawPoints = [];
-		drawSegments = [];
-		editMode = 'none';
-		editingFeature = null;
+		cancelEdit();
 		savingTrace = false;
 	}
 
 	onMount(async () => {
 		L = (await import('leaflet')).default;
-
 		map = L.map(mapEl, { zoomControl: true });
-		L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-			attribution: '&copy; OpenStreetMap', maxZoom: 20
-		}).addTo(map);
-
+		L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 20 }).addTo(map);
 		layerGroup = L.layerGroup().addTo(map);
 		editGroup = L.layerGroup().addTo(map);
-
 		map.on('click', onMapClick);
 		map.on('dblclick', onMapDblClick);
 		map.on('mousemove', onMapMouseMove);
-
 		map.setView([-20.963, 55.652], 14);
 		ready = true;
 	});
@@ -439,105 +384,119 @@
 
 	$effect(() => {
 		if (!ready) return;
-		const _features = data.features;
-		const _filtered = filteredIds;
-		const _selected = selectedId;
-		drawLayers(_features, _filtered, _selected);
+		drawLayers(data.features, filteredIds, selectedId);
 	});
 </script>
 
 <div class="relative w-full h-full">
 	<div bind:this={mapEl} class="w-full h-full"></div>
 
-	<!-- Boutons mode edition (voie sélectionnée, hors edition) -->
+	<!-- Boutons sélection voie (mode normal) -->
 	{#if selectedId && editMode === 'none'}
 		{@const f = data.features.find(x => x.id === selectedId)}
 		{#if f}
 			<div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] flex gap-2.5">
-				<button
-					onclick={() => startEdit(f)}
-					class="group flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white shadow-2xl transition-all duration-200 hover:scale-105 active:scale-95"
-					style="background:rgba(30,41,59,0.95);backdrop-filter:blur(12px);border:1px solid rgba(99,102,241,0.5);box-shadow:0 0 0 1px rgba(99,102,241,0.2),0 8px 32px rgba(0,0,0,0.4)"
-				>
+				<button onclick={() => startEdit(f)}
+					class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white shadow-2xl transition-all hover:scale-105 active:scale-95"
+					style="background:rgba(30,41,59,0.95);backdrop-filter:blur(12px);border:1px solid rgba(99,102,241,0.5);box-shadow:0 8px 32px rgba(0,0,0,0.4)">
 					<svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
 					<span class="text-indigo-200">Ajuster les nœuds</span>
 				</button>
-				<button
-					onclick={() => startDraw(f)}
-					class="group flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white shadow-2xl transition-all duration-200 hover:scale-105 active:scale-95"
-					style="background:rgba(30,41,59,0.95);backdrop-filter:blur(12px);border:1px solid rgba(249,115,22,0.5);box-shadow:0 0 0 1px rgba(249,115,22,0.2),0 8px 32px rgba(0,0,0,0.4)"
-				>
+				<button onclick={() => startDraw(f)}
+					class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white shadow-2xl transition-all hover:scale-105 active:scale-95"
+					style="background:rgba(30,41,59,0.95);backdrop-filter:blur(12px);border:1px solid rgba(249,115,22,0.5);box-shadow:0 8px 32px rgba(0,0,0,0.4)">
 					<svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-					<span class="text-orange-200">Retracer la voie</span>
+					<span class="text-orange-200">Éditer le tracé</span>
 				</button>
 			</div>
 		{/if}
 	{/if}
 
-	<!-- Barre d'actions mode DRAW -->
+	<!-- Mode DRAW -->
 	{#if editMode === 'draw' && editingFeature}
-		<!-- Tooltip haut -->
 		<div class="absolute top-4 left-1/2 -translate-x-1/2 z-[1000]"
-			style="background:rgba(15,23,42,0.9);backdrop-filter:blur(8px);border:1px solid rgba(249,115,22,0.3);border-radius:10px;padding:8px 16px">
+			style="background:rgba(15,23,42,0.92);backdrop-filter:blur(8px);border:1px solid rgba(249,115,22,0.35);border-radius:10px;padding:8px 18px">
 			<div class="flex items-center gap-2 text-xs text-gray-300">
 				<svg class="w-3.5 h-3.5 text-orange-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg>
-				Cliquez sur la carte pour poser des points — l'ancien tracé est en pointillés
+				Cliquez pour poser des points — double-clic pour valider un tronçon
+				{#if snapPoint}<span class="ml-2 text-amber-400 font-medium">⚡ Accrochage actif</span>{/if}
 			</div>
 		</div>
 
-		<!-- Barre bas -->
-		<div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000]"
-			style="background:rgba(15,23,42,0.95);backdrop-filter:blur(16px);border:1px solid rgba(249,115,22,0.4);border-radius:16px;padding:14px 20px;box-shadow:0 8px 40px rgba(0,0,0,0.5)">
-			<div class="flex items-center gap-4">
-				<!-- Info voie -->
-				<div class="pr-4" style="border-right:1px solid rgba(255,255,255,0.08)">
-					<div class="flex items-center gap-1.5 text-orange-400 text-xs font-semibold uppercase tracking-wider">
-						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M3 21h3.5l11-11-3.5-3.5L3 17.5V21z"/></svg>
-						Dessin du tracé
-					</div>
-					<div class="text-white text-sm font-medium mt-0.5 max-w-48 truncate">{editingFeature.properties.nom}</div>
-					<div class="flex gap-3 mt-1 text-xs">
-						<span class="text-gray-400">{drawPoints.length} pt{drawPoints.length > 1 ? 's' : ''} en cours</span>
-						{#if drawSegments.length > 0}<span class="text-orange-300">{drawSegments.length} segment{drawSegments.length > 1 ? 's' : ''}</span>{/if}
-					</div>
+		<div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] flex flex-col items-center gap-3">
+
+			<!-- Liste des segments existants -->
+			{#if segments.length > 0}
+				<div class="flex flex-wrap justify-center gap-1.5 max-w-xl"
+					style="background:rgba(15,23,42,0.88);backdrop-filter:blur(8px);border:1px solid rgba(249,115,22,0.25);border-radius:12px;padding:8px 12px">
+					{#each segments as seg, i}
+						<div class="flex items-center gap-1 text-xs px-2 py-1 rounded"
+							style="background:rgba(249,115,22,0.15);border:1px solid rgba(249,115,22,0.3)">
+							<span class="text-orange-300">T{i+1}</span>
+							<span class="text-gray-400">{seg.length} pts</span>
+							<button onclick={() => removeSegment(i)}
+								class="ml-1 text-gray-500 hover:text-red-400 transition-colors"
+								title="Supprimer ce tronçon">
+								<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+							</button>
+						</div>
+					{/each}
 				</div>
-				<!-- Actions -->
-				<div class="flex items-center gap-2">
-					<button onclick={undoLastPoint} disabled={drawPoints.length === 0}
-						class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-30"
-						style="background:rgba(71,85,105,0.6);border:1px solid rgba(71,85,105,0.8);color:#cbd5e1">
-						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
-						Défaire
-					</button>
-					<button onclick={validateSegment} disabled={drawPoints.length < 2}
-						class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-30"
-						style="background:rgba(67,56,202,0.6);border:1px solid rgba(99,102,241,0.6);color:#c7d2fe">
-						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-						Nouveau segment
-					</button>
-					<button onclick={saveTrace} disabled={savingTrace || (drawSegments.length === 0 && drawPoints.length < 2)}
-						class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all hover:scale-105 active:scale-95 disabled:opacity-40"
-						style="background:rgba(21,128,61,0.8);border:1px solid rgba(34,197,94,0.5);color:#bbf7d0;box-shadow:0 0 16px rgba(34,197,94,0.2)">
-						{#if savingTrace}
-							<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
-							Sauvegarde…
-						{:else}
-							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-							Enregistrer
-						{/if}
-					</button>
-					<button onclick={cancelEdit}
-						class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-all hover:scale-105 active:scale-95"
-						style="background:rgba(71,85,105,0.4);border:1px solid rgba(71,85,105,0.6);color:#94a3b8">
-						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-						Annuler
-					</button>
+			{/if}
+
+			<!-- Barre d'actions principale -->
+			<div style="background:rgba(15,23,42,0.95);backdrop-filter:blur(16px);border:1px solid rgba(249,115,22,0.4);border-radius:16px;padding:14px 20px;box-shadow:0 8px 40px rgba(0,0,0,0.5)">
+				<div class="flex items-center gap-4">
+					<div class="pr-4" style="border-right:1px solid rgba(255,255,255,0.08)">
+						<div class="flex items-center gap-1.5 text-orange-400 text-xs font-semibold uppercase tracking-wider">
+							<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M3 21h3.5l11-11-3.5-3.5L3 17.5V21z"/></svg>
+							Édition tracé
+						</div>
+						<div class="text-white text-sm font-medium mt-0.5 max-w-44 truncate">{editingFeature.properties.nom}</div>
+						<div class="flex gap-3 mt-0.5 text-xs text-gray-400">
+							<span>{segments.length} tronçon{segments.length > 1 ? 's' : ''}</span>
+							<span class="text-orange-300">{currentPts.length} pt{currentPts.length !== 1 ? 's' : ''} en cours</span>
+						</div>
+					</div>
+					<div class="flex items-center gap-2">
+						<button onclick={undoLastPoint} disabled={currentPts.length === 0}
+							class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all hover:scale-105 disabled:opacity-30"
+							style="background:rgba(71,85,105,0.6);border:1px solid rgba(71,85,105,0.8);color:#cbd5e1"
+							title="Supprimer le dernier point (Z)">
+							<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+							Défaire
+						</button>
+						<button onclick={commitCurrent} disabled={currentPts.length < 2}
+							class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all hover:scale-105 disabled:opacity-30"
+							style="background:rgba(67,56,202,0.6);border:1px solid rgba(99,102,241,0.6);color:#c7d2fe"
+							title="Valider le tronçon en cours et commencer le suivant (Entrée)">
+							<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+							Nouveau tronçon
+						</button>
+						<button onclick={saveTrace} disabled={savingTrace || (segments.length === 0 && currentPts.length < 2)}
+							class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all hover:scale-105 disabled:opacity-40"
+							style="background:rgba(21,128,61,0.8);border:1px solid rgba(34,197,94,0.5);color:#bbf7d0;box-shadow:0 0 16px rgba(34,197,94,0.2)">
+							{#if savingTrace}
+								<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+								Sauvegarde…
+							{:else}
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+								Enregistrer
+							{/if}
+						</button>
+						<button onclick={cancelEdit}
+							class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-all hover:scale-105"
+							style="background:rgba(71,85,105,0.4);border:1px solid rgba(71,85,105,0.6);color:#94a3b8">
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+							Annuler
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>
 	{/if}
 
-	<!-- Barre d'actions mode EDIT noeuds -->
+	<!-- Mode EDIT nœuds -->
 	{#if editMode === 'edit' && editingFeature}
 		<div class="absolute top-4 left-1/2 -translate-x-1/2 z-[1000]"
 			style="background:rgba(15,23,42,0.9);backdrop-filter:blur(8px);border:1px solid rgba(99,102,241,0.3);border-radius:10px;padding:8px 16px">
@@ -552,13 +511,13 @@
 				<div class="pr-4" style="border-right:1px solid rgba(255,255,255,0.08)">
 					<div class="flex items-center gap-1.5 text-indigo-400 text-xs font-semibold uppercase tracking-wider">
 						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-						Ajustement des nœuds
+						Ajustement nœuds
 					</div>
 					<div class="text-white text-sm font-medium mt-0.5 max-w-48 truncate">{editingFeature.properties.nom}</div>
 				</div>
 				<div class="flex items-center gap-2">
 					<button onclick={saveTrace} disabled={savingTrace}
-						class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all hover:scale-105 active:scale-95 disabled:opacity-40"
+						class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all hover:scale-105 disabled:opacity-40"
 						style="background:rgba(21,128,61,0.8);border:1px solid rgba(34,197,94,0.5);color:#bbf7d0;box-shadow:0 0 16px rgba(34,197,94,0.2)">
 						{#if savingTrace}
 							<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
@@ -569,7 +528,7 @@
 						{/if}
 					</button>
 					<button onclick={cancelEdit}
-						class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-all hover:scale-105 active:scale-95"
+						class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-all hover:scale-105"
 						style="background:rgba(71,85,105,0.4);border:1px solid rgba(71,85,105,0.6);color:#94a3b8">
 						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
 						Annuler
