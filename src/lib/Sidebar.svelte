@@ -86,7 +86,8 @@
 		return m.toLocaleString('fr-FR') + ' m';
 	}
 
-	const allSecteurs = $derived([...new Set(data.features.map(f => f.properties.secteur))].sort());
+	const _secsBase = $derived([...new Set(data.features.map(f => f.properties.secteur).filter(s => s != null && s !== ''))].sort() as string[]);
+	const allSecteurs = $derived(data.features.some(f => !f.properties.secteur) ? [..._secsBase, '—'] : _secsBase);
 
 	let secteursOuverts = $state<Set<string>>(new Set());
 	let voieItemEls = $state<Record<number, HTMLElement>>({});
@@ -301,7 +302,7 @@
 	<!-- Liste secteurs -->
 	<div class="flex-1 overflow-y-auto">
 		{#each allSecteurs as sec}
-			{@const voiesDuSecteur = data.features.filter(f => f.properties.secteur === sec && filteredIds.has(f.id))}
+			{@const voiesDuSecteur = data.features.filter(f => (sec === '—' ? !f.properties.secteur : f.properties.secteur === sec) && filteredIds.has(f.id))}
 			{#if voiesDuSecteur.length > 0}
 				{@const ouvert = secteursOuverts.has(sec)}
 				{@const linSec = voiesDuSecteur.reduce((s, f) => s + (f.properties.lineaire_m ?? 0), 0)}
