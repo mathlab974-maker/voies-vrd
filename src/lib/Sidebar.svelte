@@ -307,25 +307,36 @@
 				{@const ouvert = secteursOuverts.has(sec)}
 				{@const linSec = voiesDuSecteur.reduce((s, f) => s + (f.properties.lineaire_m ?? 0), 0)}
 				{@const montantSec = voiesDuSecteur.reduce((s, f) => s + (f.properties.montant ?? 0), 0)}
-				{@const terminesSec = voiesDuSecteur.filter(f => avNorm(f.properties.avancement) === 'Terminé').length}
-				{@const enCoursSec = voiesDuSecteur.filter(f => ['En cours — Travaux','En études','En programmation'].includes(avNorm(f.properties.avancement))).length}
+						{@const avCounts = Object.fromEntries(AVANCEMENTS.map(av => [av, voiesDuSecteur.filter(f => avNorm(f.properties.avancement) === av).length]))}
 
 				<!-- En-tête quartier -->
 				<button onclick={() => toggleSecteur(sec)}
-					class="w-full text-left flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-white/[0.025]"
+					class="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/[0.025]"
 					style="border-left:3px solid {ouvert ? 'rgba(99,102,241,0.7)' : 'rgba(99,102,241,0.18)'};border-bottom:1px solid rgba(255,255,255,0.06);margin-top:4px">
-					<div class="flex-1 min-w-0">
-						<div class="text-xs font-semibold uppercase tracking-widest truncate" style="color:{ouvert ? '#a5b4fc' : '#6b7280'}">{sec}</div>
-						<div class="flex items-center gap-2 mt-0.5" style="font-size:11px;color:#4b5563">
-							<span>{voiesDuSecteur.length} voie{voiesDuSecteur.length > 1 ? 's' : ''}</span>
-							{#if linSec > 0}<span style="color:#3b82f660">{fmtLin(linSec)}</span>{/if}
-							{#if montantSec > 0}<span style="color:#10b98160">{fmt(montantSec)}</span>{/if}
+					<!-- Ligne 1 : nom + flèche -->
+					<div class="flex items-center gap-2">
+						<div class="flex-1 min-w-0">
+							<div class="text-xs font-semibold uppercase tracking-widest truncate" style="color:{ouvert ? '#a5b4fc' : '#6b7280'}">{sec}</div>
+							<div class="flex items-center gap-2 mt-0.5" style="font-size:11px;color:#4b5563">
+								<span>{voiesDuSecteur.length} voie{voiesDuSecteur.length > 1 ? 's' : ''}</span>
+								{#if linSec > 0}<span style="color:#3b82f660">{fmtLin(linSec)}</span>{/if}
+								{#if montantSec > 0}<span style="color:#10b98160">{fmt(montantSec)}</span>{/if}
+							</div>
 						</div>
+						<svg class="w-3 h-3 shrink-0 transition-transform duration-200 {ouvert ? 'rotate-90' : ''}" style="color:rgba(99,102,241,0.45)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
 					</div>
-					<div class="flex items-center gap-1.5 shrink-0">
-						{#if terminesSec > 0}<span style="font-size:10px;color:#4ade8099">{terminesSec}✓</span>{/if}
-						{#if enCoursSec > 0}<span style="font-size:10px;color:#fb923c80">{enCoursSec}▶</span>{/if}
-						<svg class="w-3 h-3 transition-transform duration-200 {ouvert ? 'rotate-90' : ''}" style="color:rgba(99,102,241,0.45)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+					<!-- Ligne 2 : indicateurs par état -->
+					<div class="flex items-center gap-1 mt-1.5 flex-wrap">
+						{#each AVANCEMENTS as av}
+							{@const n = avCounts[av] ?? 0}
+							{@const col = AV_COLORS[av]}
+							{#if n > 0}
+								<div class="flex items-center gap-1 px-1.5 py-0.5 rounded" style="background:{col}18;border:1px solid {col}35">
+									<span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:{col}"></span>
+									<span style="font-size:10px;color:{col};font-weight:600">{n}</span>
+								</div>
+							{/if}
+						{/each}
 					</div>
 				</button>
 				{#if ouvert}
